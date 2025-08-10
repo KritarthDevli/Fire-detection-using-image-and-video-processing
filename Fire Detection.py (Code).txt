@@ -1,0 +1,122 @@
+import cv2
+import numpy as np
+import pygame  # Import pygame for sound
+from twilio.rest import Client  # Import Twilio client
+
+# Initialize pygame mixer for sound
+pygame.mixer.init()
+beep_sound = pygame.mixer.Sound("beep.wav.mp3")  # Load your beep sound file
+
+# Twilio setup
+TWILIO_SID = 'AC6db11ddfea9835eb4646b20702571ba6'
+TWILIO_AUTH_TOKEN = '8f83eac584182d417f12ae308e1331fd'
+TWILIO_PHONE_NUMBER = '+12673624044'
+MY_PHONE_NUMBER = '+917505725621'
+
+client = Client(TWILIO_SID, TWILIO_AUTH_TOKEN)
+
+# Use 0 for the default camera, or change to 1, 2, etc. for additional cameras
+# droidcam_url = 'http://192.168.1.4:4747/video' //droid cam
+cap = cv2.VideoCapture(0)
+
+# Create a window
+cv2.namedWindow('Fire Detection')
+
+def adjust_hsv_range(avg_brightness):
+    if avg_brightness > 150:
+        lower_fire = np.array([10, 50, 50])
+        upper_fire = np.array([25, 255, 255])
+    else:
+        lower_fire = np.array([10, 100, 100])
+        upper_fire = np.array([25, 255, 255])
+    
+    return lower_fire, upper_fire
+
+fire_detected = False  # Flag to indicate if fire was detected
+call_made = False  # Flag to indicate if a call has been made
+
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        print("Error reading from the camera.")
+        break
+
+    # Resize the frame to fit the window
+    frame = cv2.resize(frame, (640, 480))
+
+    # Convert to HSV color space
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+    # Calculate average brightness
+    avg_brightness = cv2.mean(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))[0]
+
+    # Get adjusted HSV range
+    lower_fire, upper_fire = adjust_hsv_range(avg_brightness)
+
+    # Create a mask for fire detection
+    mask = cv2.inRange(hsv, lower_fire, upper_fire)
+
+    # Calculate the percentage of fire
+    fire_area = cv2.countNonZero(mask)
+    total_area = frame.shape[0] * frame.shape[1]
+    fire_percentage = (fire_area / total_area) * 100
+
+    # Set color based on fire percentage
+    if fire_percentage <= 5:
+        percentage_color = (0, 255, 0)  # Green
+    else:
+        percentage_color = (0, 0, 255)  # Red
+
+    # Find contours of the detected fire
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # Draw contours on the original frame and add text
+    for contour in contours:
+        if cv2.contourArea(contour) > 500:  # Filter out small contours
+            x, y, w, h = cv2.boundingRect(contour)
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
+            cv2.putText(frame, 'Fire Detected', (x, y - 10), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+
+            # Add warning text when fire is detected
+            cv2.putText(frame, 'WARNING: FIRE DETECTED!', (50, 450), 
+                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 3)
+
+            # Trigger sound and call if fire is detected and not already triggered
+            if not fire_detected:
+                beep_sound.play()  # Play the beep sound
+                
+                # Make a call alert only if it hasn't been made yet
+                if not call_made:
+                    call = client.calls.create(
+                        to=MY_PHONE_NUMBER,
+                        from_=TWILIO_PHONE_NUMBER,
+                        url='http://demo.twilio.com/docs/voice.xml'  # URL for TwiML instructions
+                    )
+                    
+                    print(f"Call initiated: {call.sid}")  # Print call SID for confirmation
+                    call_made = True  # Set the flag to true to indicate call has been made
+                fire_detected = True  # Set the flag to true for fire detection
+    else:
+        fire_detected = False  # Reset the fire detection flag if no fire is detected
+
+    # Display the fire percentage on the frame with dynamic color
+    cv2.putText(frame, f'Fire Percentage: {fire_percentage:.2f}%', (10, 30), 
+                cv2.FONT_HERSHEY_SIMPLEX, 0.7, percentage_color, 2)
+
+    # Show the original frame with detections
+    cv2.imshow('Fire Detection', frame)
+
+    # Check for key presses
+    key = cv2.waitKey(1)
+    if key == ord('q'):
+        break
+    elif key == ord('f'):  # Press 'f' to toggle full screen
+        if cv2.getWindowProperty('Fire Detection', cv2.WND_PROP_FULLSCREEN) == 0:
+            cv2.setWindowProperty('Fire Detection', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL)
+        else:
+            cv2.setWindowProperty('Fire Detection', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+
+# Clean up
+cap.release()
+cv2.destroyAllWindows()
