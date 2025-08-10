@@ -7,11 +7,6 @@ from twilio.rest import Client  # Import Twilio client
 pygame.mixer.init()
 beep_sound = pygame.mixer.Sound("beep.wav.mp3")  # Load your beep sound file
 
-# Twilio setup
-TWILIO_SID = 'AC6db11ddfea9835eb4646b20702571ba6'
-TWILIO_AUTH_TOKEN = '8f83eac584182d417f12ae308e1331fd'
-TWILIO_PHONE_NUMBER = '+12673624044'
-MY_PHONE_NUMBER = '+917505725621'
 
 client = Client(TWILIO_SID, TWILIO_AUTH_TOKEN)
 
@@ -120,3 +115,4 @@ while True:
 # Clean up
 cap.release()
 cv2.destroyAllWindows()
+
